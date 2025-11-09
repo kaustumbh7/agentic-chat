@@ -9,7 +9,7 @@ export interface StreamEvent {
   content?: string;
   tool?: string;
   input?: string;
-  output?: string;
+  output?: string | null;
 }
 
 export interface ToolCall {

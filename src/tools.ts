@@ -1,54 +1,83 @@
 import axios from "axios";
 
 /**
- * Web search tool using a search API
- * For production, you'd use a proper search API like SerpAPI, Google Custom Search, etc.
- * This is a simplified version using DuckDuckGo's instant answer API
+ * Web search tool using SerpAPI
+ * SerpAPI provides Google search results via their API
  */
 export async function webSearch(query: string): Promise<string> {
+  return await serpApiSearch(query);
+}
+
+/**
+ * SerpAPI search implementation
+ * SerpAPI provides Google search results via their API
+ */
+async function serpApiSearch(query: string): Promise<string> {
+  const serpApiKey = process.env.SERPAPI_KEY;
+
+  if (!serpApiKey) {
+    return `Error: SERPAPI_KEY environment variable is required for web search. Please configure it in your .env file. Get your API key at https://serpapi.com/`;
+  }
+
   try {
-    // Using DuckDuckGo instant answer API as a free alternative
-    // For production, consider using SerpAPI, Google Custom Search, or similar
-    const response = await axios.get("https://api.duckduckgo.com/", {
+    const response = await axios.get("https://serpapi.com/search", {
       params: {
+        api_key: serpApiKey,
+        engine: "google",
         q: query,
-        format: "json",
-        no_html: "1",
-        skip_disambig: "1",
+        num: 5, // Number of results
       },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     const data = response.data;
-    let results = "";
+    let results = `Search results for "${query}":\n\n`;
 
-    if (data.AbstractText) {
-      results += `Abstract: ${data.AbstractText}\n`;
-    }
-    if (data.Answer) {
-      results += `Answer: ${data.Answer}\n`;
-    }
-    if (data.Definition) {
-      results += `Definition: ${data.Definition}\n`;
-    }
-    if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-      results += "Related Topics:\n";
-      data.RelatedTopics.slice(0, 3).forEach((topic: any) => {
-        if (topic.Text) {
-          results += `- ${topic.Text}\n`;
+    // Extract organic search results
+    if (data.organic_results && data.organic_results.length > 0) {
+      data.organic_results.slice(0, 5).forEach((item: any, index: number) => {
+        results += `${index + 1}. ${item.title || "No title"}\n`;
+        if (item.snippet) {
+          results += `   ${item.snippet}\n`;
         }
+        if (item.link) {
+          results += `   URL: ${item.link}\n`;
+        }
+        results += "\n";
       });
+    } else if (data.answer_box) {
+      // If there's an answer box, use that
+      const answerBox = data.answer_box;
+      if (answerBox.answer) {
+        results += `Answer: ${answerBox.answer}\n`;
+      }
+      if (answerBox.snippet) {
+        results += `\n${answerBox.snippet}\n`;
+      }
+      if (answerBox.link) {
+        results += `\nSource: ${answerBox.link}\n`;
+      }
+    } else if (data.knowledge_graph) {
+      // Use knowledge graph if available
+      const kg = data.knowledge_graph;
+      if (kg.title) {
+        results += `${kg.title}\n`;
+      }
+      if (kg.description) {
+        results += `${kg.description}\n`;
+      }
+    } else {
+      results = `No search results found for: "${query}"`;
     }
 
-    // If no results from DuckDuckGo, try a web search simulation
-    if (!results.trim()) {
-      // Fallback: return a message indicating search was performed
-      results = `Searched for: "${query}". No instant answer available. Consider using a more specific search API for detailed results.`;
+    return results.trim();
+  } catch (error: any) {
+    console.error("SerpAPI search error:", error);
+    if (error.response) {
+      const status = error.response.status;
+      const message = error.response.data?.error || error.message;
+      return `Error performing web search (Status ${status}): ${message}. Please check your SERPAPI_KEY.`;
     }
-
-    return results.trim() || `Search performed for: "${query}"`;
-  } catch (error) {
-    console.error("Web search error:", error);
-    return `Error performing web search for: "${query}". Please try again or rephrase your query.`;
+    return `Error performing web search for: "${query}". Please try again or check your SERPAPI_KEY configuration.`;
   }
 }

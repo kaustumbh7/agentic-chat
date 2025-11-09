@@ -36,12 +36,21 @@ npm install
 cp .env.example .env
 ```
 
-4. Add your Gemini API key to `.env`:
+4. Add your API keys to `.env`:
 
 ```
 PORT=3000
+
+# Google Gemini API Key (required)
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Web search configuration (required)
+SERPAPI_KEY=your_serpapi_key_here
 ```
+
+**Note:** For web search, SerpAPI is required:
+
+- **SerpAPI**: Get API key: https://serpapi.com/ (free tier: 100 searches/month)
 
 ## Usage
 
@@ -78,7 +87,7 @@ curl -X POST http://localhost:3000/chat \
 
 The endpoint streams JSON events in SSE format:
 
-```json
+```
 data: {"type":"reasoning","content":"Let me think about the current state of AI..."}
 
 data: {"type":"tool_call","tool":"web_search","input":"AI state 2025","output":"..."}
@@ -123,51 +132,6 @@ Health check endpoint.
 curl http://localhost:3000/health
 ```
 
-## Example Client (JavaScript)
-
-```javascript
-const eventSource = new EventSource("http://localhost:3000/chat", {
-  method: "POST",
-  body: JSON.stringify({ query: "What is the latest news about AI?" }),
-  headers: { "Content-Type": "application/json" },
-});
-
-// For POST requests, use fetch with ReadableStream instead:
-async function streamChat(query) {
-  const response = await fetch("http://localhost:3000/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  });
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value);
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const data = line.slice(6);
-        if (data === "[DONE]") return;
-
-        try {
-          const event = JSON.parse(data);
-          console.log("Event:", event);
-        } catch (e) {
-          // Skip invalid JSON
-        }
-      }
-    }
-  }
-}
-
-streamChat("Explain the state of AI in 2025?");
-```
 
 ## Project Structure
 
@@ -178,8 +142,9 @@ agentic-chat/
 │   ├── gemini.ts         # Gemini API integration
 │   ├── tools.ts          # External tools (web search)
 │   └── types.ts          # TypeScript type definitions
-├── dist/                 # Compiled JavaScript (after build)
+├── example-client.js     # Example client implementation
 ├── package.json
+├── package-lock.json
 ├── tsconfig.json
 └── README.md
 ```
@@ -190,14 +155,44 @@ agentic-chat/
 - **TypeScript** - Type-safe JavaScript
 - **Express.js** - Web framework
 - **Google Gemini API** - LLM for reasoning and generation
-- **Axios** - HTTP client for web search
 
-## Notes
+## Agentic Behavior
 
-- The web search tool uses DuckDuckGo's instant answer API as a free alternative. For production use, consider integrating with SerpAPI, Google Custom Search API, or similar services.
-- The server uses Server-Sent Events (SSE) for streaming, which works well for one-way communication from server to client.
-- Function calling is handled automatically by Gemini when it determines that external tools are needed.
+The endpoint implements **agentic reasoning** where Gemini autonomously decides whether to use external tools:
 
-## License
+1. **Reasoning Phase**: Model analyzes the query and decides if external data is needed
+2. **Tool Calling**: If required, calls `web_search` with appropriate parameters
+3. **Response Refinement**: Uses tool output to generate accurate, contextual responses
 
-MIT
+### Event Flow
+
+```
+User Query → Reasoning → Tool Decision → Tool Call (if needed) → Final Response
+```
+
+Example flow:
+
+```
+data: {"type":"reasoning","content":"I need recent data on AI development."}
+data: {"type":"tool_call","tool":"web_search","input":"AI state 2025","output":null}
+data: {"type":"tool_call","tool":"web_search","input":"AI state 2025","output":"<search results>"}
+data: {"type":"response","content":"Based on current data, AI in 2025..."}
+```
+
+## Web Search Configuration
+
+The system uses **SerpAPI** for web search:
+
+- Get API key: https://serpapi.com/ (free tier: 100 searches/month)
+- Add `SERPAPI_KEY` to `.env`
+- Provides Google search results via SerpAPI's service
+
+**Note**: SerpAPI is required for web search functionality. It's easy to set up and provides high-quality Google search results.
+
+## Technical Notes
+
+- Uses **gemini-2.5-pro** for reliable function calling support
+- Streams JSON events via **Server-Sent Events (SSE)**
+- Function calling is autonomous - Gemini decides when tools are needed
+- Tool calls send 2 events: pre-call (output: null) and post-call (output: results)
+

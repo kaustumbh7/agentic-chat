@@ -21,7 +21,13 @@ function getGenAI(): GoogleGenerativeAI {
  * Get the Gemini model with function calling support
  */
 export function getGeminiModel() {
-  return getGenAI().getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+  // Use gemini-2.5-pro for better function calling support
+  return getGenAI().getGenerativeModel({
+    model: "gemini-2.5-pro",
+    generationConfig: {
+      temperature: 0.7,
+    },
+  });
 }
 
 /**
@@ -31,13 +37,14 @@ export const functionDeclarations = [
   {
     name: "web_search",
     description:
-      "Search the web for current information, facts, or real-time data. Use this when you need up-to-date information that might not be in your training data.",
+      "Search the web for current information, facts, or real-time data. Use this function when the user asks about current events, recent news, statistics, or anything requiring up-to-date information beyond your training data cutoff.",
     parameters: {
       type: "object" as const,
       properties: {
         query: {
           type: "string" as const,
-          description: "The search query to look up on the web",
+          description:
+            "The specific search query to look up on the web. Be precise and focused.",
         },
       },
       required: ["query"],
@@ -94,6 +101,16 @@ export async function* streamGeminiResponse(
 
     // If there were function calls, handle them
     if (functionCalls.length > 0) {
+      // If the model didn't generate reasoning text before calling a function,
+      // add a reasoning event to show agentic decision-making
+      if (!hasText || fullResponse.trim().length === 0) {
+        yield {
+          type: "reasoning",
+          content:
+            "I need to search for current information to answer this accurately.",
+        };
+      }
+
       for (const funcCall of functionCalls) {
         const functionName = funcCall.name;
         const args = funcCall.args;
@@ -102,18 +119,19 @@ export async function* streamGeminiResponse(
           const searchQuery =
             args.query || args.searchQuery || JSON.stringify(args);
 
+          // Send pre-call event with output: null
           yield {
             type: "tool_call",
             tool: "web_search",
             input: searchQuery,
-            output: "", // Will be filled after search completes
+            output: null,
           };
 
           // Import and call the web search tool
           const { webSearch } = await import("./tools");
           const searchResults = await webSearch(searchQuery);
 
-          // Update the tool_call event with output
+          // Send post-call event with actual output
           yield {
             type: "tool_call",
             tool: "web_search",
