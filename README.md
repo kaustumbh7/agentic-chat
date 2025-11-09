@@ -2,6 +2,10 @@
 
 An Express.js server with a single `/chat` route that accepts user queries and returns AI-generated content with **agentic reasoning** capabilities. The server uses Google Gemini API and can trigger external tools (like web search) to improve responses.
 
+## Demo
+
+📹 [Watch the demo video](https://drive.google.com/file/d/1N86uxH0m0tjMb-YVBBsLDNyeiXBXh2Ue/view?usp=sharing)
+
 ## Features
 
 - ✅ **Agentic Reasoning**: Uses Google Gemini API with function calling support
@@ -132,7 +136,6 @@ Health check endpoint.
 curl http://localhost:3000/health
 ```
 
-
 ## Project Structure
 
 ```
@@ -195,4 +198,3 @@ The system uses **SerpAPI** for web search:
 - Streams JSON events via **Server-Sent Events (SSE)**
 - Function calling is autonomous - Gemini decides when tools are needed
 - Tool calls send 2 events: pre-call (output: null) and post-call (output: results)
-
